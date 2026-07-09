@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ガスバーナー操作免許センター Ver24.1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ガスバーナー操作免許センター Ver 26.0</title>
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -11,14 +11,44 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- アニメーション・UI用CSS -->
+    <style>
+        @keyframes flicker { 0%, 100% { opacity: 1; transform: scale(1) translateY(0); } 50% { opacity: 0.85; transform: scale(1.05) translateY(-2px); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+        @keyframes opacity-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes gas-drift { 0% { transform: translate(0, 0) scale(1); opacity: 0.3; } 50% { transform: translate(20px, -20px) scale(1.2); opacity: 0.6; } 100% { transform: translate(-20px, -40px) scale(1.5); opacity: 0; } }
+        @keyframes drop-match { 0% { transform: translateY(-30px) rotate(-30deg) scale(1.2); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(0) rotate(15deg) scale(1); opacity: 1; } }
+        
+        .animate-flicker { animation: flicker 0.12s infinite alternate; }
+        .animate-shake { animation: shake 0.08s infinite alternate; }
+        .animate-opacity-flicker { animation: opacity-flicker 0.12s infinite alternate; }
+        .animate-gas { animation: gas-drift 4s infinite linear; }
+        .animate-drop { animation: drop-match 0.5s ease-out forwards; }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .touch-none { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+        /* インクルーシブデザイン用ハイライトアニメーション */
+        @keyframes pulse-highlight {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            50% { box-shadow: 0 0 0 12px rgba(234, 179, 8, 0); }
+        }
+        .highlight-target {
+            animation: pulse-highlight 2s infinite;
+            border-color: #eab308 !important;
+            background-color: #fefce8 !important;
+        }
+    </style>
 </head>
-<body class="bg-slate-900 m-0 p-0 overflow-hidden">
+<body class="bg-slate-900 m-0 p-0 overflow-hidden touch-none">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- カスタムアイコンコンポーネント (外部ライブラリ依存排除) ---
+        // --- カスタムアイコンコンポーネント (外部ライブラリ完全排除) ---
         const Icon = ({ d, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {d}
@@ -38,21 +68,10 @@
         const ShieldAlert = (props) => <Icon d={<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></>} {...props} />;
         const RotateCw = (props) => <Icon d={<><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>} {...props} />;
         const RotateCcw = (props) => <Icon d={<><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>} {...props} />;
-
-// --- CSS for Animations and UD ---
-const customStyles = `
-  @keyframes flicker { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.05) translateY(-2px); } }
-  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
-  @keyframes gas-drift { 0% { transform: translate(0, 0) scale(1); opacity: 0.3; } 50% { transform: translate(20px, -20px) scale(1.2); opacity: 0.6; } 100% { transform: translate(-20px, -40px) scale(1.5); opacity: 0; } }
-  @keyframes drop-match { 0% { transform: translateY(-30px) rotate(-30deg) scale(1.2); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(0) rotate(15deg) scale(1); opacity: 1; } }
-  .animate-flicker { animation: flicker 0.12s infinite alternate; }
-  .animate-shake { animation: shake 0.08s infinite alternate; }
-  .animate-gas { animation: gas-drift 4s infinite linear; }
-  .animate-drop { animation: drop-match 0.5s ease-out forwards; }
-  .hide-scrollbar::-webkit-scrollbar { display: none; }
-  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .touch-none { touch-action: none; user-select: none; -webkit-user-select: none; }
-`;
+        
+        // 道具用アイコン
+        const Hand = (props) => <Icon d={<><path d="M18 11V6a2 2 0 0 0-4 0v4h-2V4a2 2 0 0 0-4 0v6H6V5a2 2 0 0 0-4 0v11a8 8 0 0 0 16 0z"/></>} {...props} />;
+        const Eraser = (props) => <Icon d={<><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>} {...props} />;
 
 // --- Utility: Hold Button ---
 const HoldButton = ({ onAction, disabled, className, children }) => {
@@ -83,12 +102,12 @@ const HoldButton = ({ onAction, disabled, className, children }) => {
 };
 
 // --- Real Valve Component ---
-const RealValve = ({ isOpen, onClick, label, isCock, disabled }) => {
+const RealValve = ({ isOpen, onClick, label, isCock, disabled, highlight }) => {
   const rotation = isOpen ? 90 : 0;
   return (
-    <div className={`flex flex-col items-center flex-1 ${disabled ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+    <div className={`flex flex-col items-center flex-1 ${disabled && !highlight ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
       <span className="text-xl font-black text-slate-800 mb-3 tracking-wider">{label}</span>
-      <button onClick={onClick} disabled={disabled} className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center transition-transform active:scale-95 touch-none outline-none group bg-white rounded-3xl border-4 border-slate-200 shadow-md hover:shadow-lg p-2">
+      <button onClick={onClick} disabled={disabled} className={`relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center transition-transform active:scale-95 touch-none outline-none group rounded-3xl shadow-md hover:shadow-lg p-2 ${highlight ? 'highlight-target' : 'bg-white border-4 border-slate-200'}`}>
         <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-md overflow-visible">
           <defs>
             <linearGradient id="pipeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -123,15 +142,31 @@ const RealValve = ({ isOpen, onClick, label, isCock, disabled }) => {
 };
 
 // --- DragDial Component ---
-const DragDial = ({ label, value, onChange, icon, colorTheme, disabled }) => {
+const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disabled, stuckLevel, onTryStuck, highlight }) => {
   const valueRef = useRef(value); 
   const isDragging = useRef(false);
   const lastX = useRef(0);
+  const isStuckWarningTriggered = useRef(false); 
   
-  useEffect(() => { valueRef.current = value; }, [value]);
+  // ★親システムからの値をローカルに強制同期させ、ドラッグすっぽ抜けバグを完全防止
+  if (!isDragging.current) {
+      valueRef.current = value;
+  }
+
+  const triggerStuck = () => {
+      if (!isStuckWarningTriggered.current) {
+          isStuckWarningTriggered.current = true;
+          onTryStuck();
+          setTimeout(() => { isStuckWarningTriggered.current = false; }, 1000); 
+      }
+  };
 
   const handlePointerDown = (e) => {
     if (disabled) return;
+    if (stuckLevel && stuckLevel !== 'none') {
+        triggerStuck();
+        return;
+    }
     isDragging.current = true;
     lastX.current = e.clientX;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -141,36 +176,60 @@ const DragDial = ({ label, value, onChange, icon, colorTheme, disabled }) => {
     if (!isDragging.current || disabled) return;
     const deltaX = e.clientX - lastX.current;
     lastX.current = e.clientX;
-    const newValue = Math.max(0, Math.min(100, valueRef.current - deltaX * 0.4)); 
-    if (Math.round(newValue) !== Math.round(valueRef.current)) onChange(Math.round(newValue));
+    
+    if (Math.abs(deltaX) > 0) {
+        if (stuckLevel && stuckLevel !== 'none') {
+            isDragging.current = false;
+            triggerStuck();
+            return;
+        }
+        valueRef.current = Math.max(0, Math.min(100, valueRef.current - deltaX * 0.4)); 
+        const roundedNew = Math.round(valueRef.current);
+        if (roundedNew !== value) {
+            onChange(roundedNew);
+        }
+    }
   };
 
   const handlePointerUp = (e) => {
     isDragging.current = false;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    valueRef.current = value;
   };
 
   const handleHoldAction = (delta) => {
+    if (stuckLevel && stuckLevel !== 'none') {
+        triggerStuck();
+        return;
+    }
     const newValue = Math.max(0, Math.min(100, valueRef.current + delta));
-    if (newValue !== valueRef.current) onChange(newValue);
+    if (newValue !== valueRef.current) {
+        valueRef.current = newValue; 
+        onChange(newValue);
+    }
   };
 
   const theme = colorTheme === 'blue' ? { border: 'border-blue-400', fill: '#3b82f6', iconColor: 'text-blue-600' } : { border: 'border-red-400', fill: '#ef4444', iconColor: 'text-red-600' };
+  
+  const bgPositionX = visualValue !== undefined ? visualValue * 10 : value * 10;
+  const isStuckWarning = stuckLevel && stuckLevel !== 'none';
 
   return (
-    <div className={`p-4 sm:p-6 rounded-[2rem] border-4 bg-white shadow-md flex flex-col gap-4 transition-opacity ${disabled ? 'opacity-50 grayscale pointer-events-none' : theme.border}`}>
+    <div className={`p-4 sm:p-6 rounded-[2rem] border-4 bg-white shadow-md flex flex-col gap-4 transition-opacity ${disabled && !highlight ? 'opacity-50 grayscale pointer-events-none' : theme.border} ${highlight ? 'highlight-target' : ''}`}>
       <div className="flex justify-between items-center px-2">
-        <label className={`font-black text-lg sm:text-2xl flex items-center gap-2 sm:gap-3 ${theme.iconColor}`}>{icon} {label}</label>
+        <label className={`font-black text-lg sm:text-2xl flex items-center gap-2 sm:gap-3 ${theme.iconColor}`}>
+            {icon} {label} {isStuckWarning && <ShieldAlert size={20} className="text-red-500 animate-pulse" />}
+        </label>
         <span className="text-xl sm:text-3xl font-mono font-black bg-slate-100 px-4 sm:px-5 py-1 sm:py-2 rounded-2xl border-2 border-slate-300 shadow-inner">{value}%</span>
       </div>
       <div className="w-full h-3 sm:h-4 bg-slate-200 rounded-full overflow-hidden border-2 border-slate-300">
          <div className="h-full bg-slate-600 transition-all duration-75" style={{ width: `${value}%` }}></div>
       </div>
-      <div className="relative w-full h-20 sm:h-24 rounded-3xl overflow-hidden cursor-ew-resize touch-none shadow-[inset_0_4px_15px_rgba(0,0,0,0.3)] border-2 border-slate-800 bg-slate-800 flex items-center justify-center group" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onPointerLeave={handlePointerUp}>
-        <div className="absolute inset-0 w-[200%] h-full opacity-80" style={{ backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(0,0,0,0.6) 10px, rgba(0,0,0,0.6) 20px)`, backgroundPositionX: `${value * 10}px`, backgroundColor: theme.fill }} />
+      <div className={`relative w-full h-20 sm:h-24 rounded-3xl overflow-hidden cursor-ew-resize touch-none shadow-[inset_0_4px_15px_rgba(0,0,0,0.3)] border-2 ${isStuckWarning ? 'border-red-500 bg-red-900' : 'border-slate-800 bg-slate-800'} flex items-center justify-center group`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onPointerLeave={handlePointerUp}>
+        <div className="absolute inset-0 w-[200%] h-full opacity-80 transition-all duration-75" style={{ backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(0,0,0,0.6) 10px, rgba(0,0,0,0.6) 20px)`, backgroundPositionX: `${bgPositionX}px`, backgroundColor: isStuckWarning ? '#7f1d1d' : theme.fill }} />
         <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-black/60 pointer-events-none"></div>
         <div className="relative z-10 flex items-center gap-2 sm:gap-3 text-white/90 bg-black/40 px-4 sm:px-6 py-2 rounded-full font-black text-xs sm:text-lg pointer-events-none backdrop-blur-sm shadow-lg border border-white/20">
-          <RotateCw size={20} />左右にこすって回す<RotateCcw size={20} />
+          <RotateCw size={20} />{isStuckWarning ? '固着しています！' : '左右にこすって回す'}<RotateCcw size={20} />
         </div>
       </div>
       <div className="flex gap-2 sm:gap-4">
@@ -190,7 +249,7 @@ const ERROR_INFO = {
   gasLeak: { title: "ガス漏れ・充満", icon: "💨", color: "text-emerald-400", bg: "bg-emerald-950", border: "border-emerald-600", explanation: "生ガスが室内に充満しました。わずかな火花で部屋全体を巻き込む大爆発を引き起こします。" },
   explosion: { title: "異常燃焼・爆発", icon: "💥", color: "text-red-500", bg: "bg-red-950", border: "border-red-600", explanation: "空気を混ぜてしまったり、ガスが溜まった状態で火を近づけたため急激な燃焼（爆発）が起きました。" },
   backfire: { title: "逆火（バックファイア）", icon: "🔥", color: "text-orange-500", bg: "bg-orange-950", border: "border-orange-600", explanation: "空気が開いたままガスを減らしたため、炎が筒の内部に吸い込まれて燃える『逆火』が起きました。必ず空気を0にして炎を赤くしてから消火してください。" },
-  fire: { title: "引火・火災", icon: "🧯", color: "text-rose-500", bg: "bg-rose-950", border: "border-rose-600", explanation: "火のついたマッチを持ったままねじを操作しようとしたり、水のない所に捨てたため引火しました。マッチは点火後、すぐに燃えかす入れに捨ててください。" },
+  fire: { title: "引火・火災", icon: "🧯", color: "text-rose-500", bg: "bg-rose-950", border: "border-rose-600", explanation: "火のついたマッチを持ったまま危険な操作をしました。衣服への引火の危険があります。マッチは点火後、空気ねじを触る前に確実に捨ててください。" },
   procedure: { title: "重大な手順違反", icon: "⚠️", color: "text-yellow-400", bg: "bg-yellow-950", border: "border-yellow-600", explanation: "理科室の安全基準を著しく逸脱する危険な操作です。正しい手順をもう一度確認してください。" }
 };
 
@@ -200,7 +259,7 @@ const TitleScreen = ({ onStart, onTutorial }) => (
     <div className="bg-slate-800 p-8 sm:p-12 rounded-3xl shadow-2xl max-w-2xl w-full text-center border-t-[12px] border-orange-500 relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><FlameIcon size={150} /></div>
       <h1 className="text-4xl sm:text-6xl font-black mb-2 text-orange-400 tracking-tight leading-tight drop-shadow-lg">ガスバーナー<br />操作免許センター</h1>
-      <p className="text-xl font-bold text-orange-200 mb-6 bg-orange-900/50 inline-block px-4 py-1 rounded-full border border-orange-500/50">Ver 24.1 (完全安定・バグ排除版)</p>
+      <p className="text-xl font-bold text-orange-200 mb-6 bg-orange-900/50 inline-block px-4 py-1 rounded-full border border-orange-500/50">Ver 26.0 (Inclusive Edition)</p>
       <div className="bg-slate-700/60 p-6 rounded-2xl mb-8 text-left border-l-[8px] border-blue-400 shadow-inner">
         <p className="text-base sm:text-lg text-slate-200 leading-relaxed font-medium">
           実際の実験手順通りに操作しないと<strong className="text-red-400 bg-red-950 px-2 py-0.5 rounded mx-1 whitespace-nowrap shadow-sm border border-red-800">一発免停</strong>となります。
@@ -222,7 +281,7 @@ const TutorialScreen = ({ onBack }) => (
       <div className="bg-slate-800 p-6 rounded-2xl border-l-[12px] border-yellow-500 shadow-xl">
         <h3 className="text-2xl font-black mb-4 text-yellow-300">1. 点検と準備</h3>
         <ol className="list-decimal list-inside space-y-2 text-lg font-medium">
-          <li><strong>両方のねじ</strong>の動きを確認し、<span className="text-red-400 bg-red-950 px-2 py-0.5 rounded whitespace-nowrap">必ず「全閉（0%）」</span>に戻す。</li>
+          <li><strong>両方のねじ</strong>の動きを確認し、<span className="text-red-400 bg-red-950 px-2 py-0.5 rounded whitespace-nowrap">必ず「全閉（0%）」</span>に戻す。固着している場合は適切な工具を使います。</li>
           <li><strong>燃えかす入れ</strong>に水を入れる。（※必ずゴム管を繋ぐ前に！）</li>
           <li>ゴム管をガスの<strong>元栓に接続</strong>する。</li>
         </ol>
@@ -332,17 +391,23 @@ const App = () => {
   
   const [taskPhase, setTaskPhase] = useState('inspect');
   const [message, setMessage] = useState('');
-  const [isPerfectFlame, setIsPerfectFlame] = useState(false);
 
-  // ズーム判定
+  // --- 工具と固着システム ---
+  const [selectedTool, setSelectedTool] = useState('hand');
+  const [stuckState, setStuckState] = useState({ gas: 'none', air: 'none' });
+  const [stuckMistakes, setStuckMistakes] = useState(0);
+
+  // --- 完璧な炎の判定 ---
+  const isFlamePerfect = !hasMatchInHand && isBurnerLit && taskPhase === 'adjust_air' && gasLevel >= 30 && (airLevel / (gasLevel || 1) >= 0.85) && (airLevel / (gasLevel || 1) <= 1.15);
+
   const isZoomMode = isBurnerLit && !hasMatchInHand && !taskPhase.startsWith('extinguish_cock') && !taskPhase.startsWith('extinguish_main') && !taskPhase.startsWith('cleanup') && !taskPhase.startsWith('emergency');
 
   const getPhaseGroup = (phase) => {
     if (phase.startsWith('inspect')) return 0;
     if (phase.startsWith('prepare')) return 1;
     if (phase.startsWith('ignite')) return 2;
-    if (phase.startsWith('adjust') || phase === 'extinguish_air' || phase === 'extinguish_gas') return 3; 
-    if (phase === 'extinguish_cock' || phase === 'extinguish_main') return 4;
+    if (phase.startsWith('adjust') || phase === 'burning') return 3; 
+    if (phase.startsWith('extinguish')) return 4;
     if (phase.startsWith('cleanup')) return 5;
     if (phase.startsWith('emergency')) return -1;
     return 0;
@@ -351,18 +416,27 @@ const App = () => {
   const resetGame = (mode) => {
     setIsCheckedScrew(false); setIsHoseConnected(false); setWaterInAshtray(false);
     setMainValve(false); setCock(false); setHasMatchInHand(false); setIsBurnerLit(false);
-    setHasDroppedMatch(false); setIsPerfectFlame(false); setEmergencyTimer(null); 
+    setHasDroppedMatch(false); setEmergencyTimer(null); 
     
+    setSelectedTool('hand');
+    setStuckState({ gas: 'none', air: 'none' });
+    setStuckMistakes(0);
+
     if (mode === 'trouble') {
-      const isForgot = Math.random() > 0.5;
-      if (isForgot) {
+      const rand = Math.random();
+      if (rand < 0.33) {
         setScenario('forgot_screw'); setGasLevel(60); setAirLevel(40);
         setTaskPhase('inspect');
         setMessage('【異常発生】前の班がねじを開けたまま片付けたようです。ドラムを回して0%に閉めてください。');
-      } else {
+      } else if (rand < 0.66) {
         setScenario('wind'); setGasLevel(15); setAirLevel(10);
         setTaskPhase('inspect');
         setMessage('【警告】今日は窓からの突風に注意してください。まずはねじを回して0%に閉めて点検してください。');
+      } else {
+        setScenario('stuck_screw'); setGasLevel(8); setAirLevel(5);
+        setStuckState({ gas: 'hard', air: 'light' });
+        setTaskPhase('inspect');
+        setMessage('【異常発生】ねじが少し開いたまま固着しています！このままではガス漏れの危険があるため0%に閉めたいですが、素手では回りません。道具箱から適切な道具を選んで緩めてください。');
       }
     } else {
       setScenario(null); 
@@ -374,17 +448,53 @@ const App = () => {
   };
 
   const startGame = (mode) => { setGameMode(mode); resetGame(mode); setGameState('playing'); };
-  const triggerGameOver = (reason, type) => { setGameOverInfo({ reason, type }); setGameState('gameover'); };
+  
+  const triggerGameOver = (reason, type) => { 
+    setGameOverInfo({ reason, type }); 
+    setGameState('gameover'); 
+  };
+
+  const handleTryStuck = (screwType) => {
+    const level = stuckState[screwType];
+    const screwName = screwType === 'gas' ? 'ガス調節ねじ' : '空気調節ねじ';
+
+    if (level === 'none') return;
+
+    if (level === 'light' && (selectedTool === 'cloth' || selectedTool === 'pliers')) {
+        setStuckState(prev => ({...prev, [screwType]: 'none'}));
+        setMessage(`【固着解除】${selectedTool === 'cloth' ? '雑巾' : 'ペンチ'}を使って、${screwName}の固着を解除しました！`);
+        return;
+    }
+    if (level === 'hard' && selectedTool === 'pliers') {
+        setStuckState(prev => ({...prev, [screwType]: 'none'}));
+        setMessage(`【固着解除】ペンチを使って、固く締まった${screwName}の固着を解除しました！`);
+        return;
+    }
+
+    if (selectedTool === 'hand') {
+        const nextMistakes = stuckMistakes + 1;
+        setStuckMistakes(nextMistakes);
+        // 【緩和】3回失敗で免停に変更
+        if (nextMistakes >= 3) {
+            triggerGameOver("【器具破損】固いねじを素手で力任せに回し続けたため、ねじ山が潰れてバーナーが壊れてしまいました！適切な道具を使いましょう。", "procedure");
+        } else {
+            setMessage(`【警告】${screwName}が固くて素手では回りません！力任せに回すと壊れます。道具箱から適切な道具を選んでください。`);
+        }
+    } else if (level === 'hard' && selectedTool === 'cloth') {
+        setMessage(`【警告】固すぎて雑巾では滑ってしまいます。もっと強力な道具が必要です。`);
+    }
+  };
 
   // --- Logic Handlers ---
   
   useEffect(() => {
     if (taskPhase === 'inspect' && gasLevel === 0 && airLevel === 0 && !isCheckedScrew) {
+      if (stuckState.gas !== 'none' || stuckState.air !== 'none') return; 
       setIsCheckedScrew(true);
       setTaskPhase('prepare_water');
       setMessage('【点検完了】ねじヨシ。次に、燃えかす入れに水を入れてください。');
     }
-  }, [gasLevel, airLevel, taskPhase, isCheckedScrew]);
+  }, [gasLevel, airLevel, taskPhase, isCheckedScrew, stuckState]);
 
 
   const handleWaterOrDisposeMatch = () => {
@@ -395,7 +505,7 @@ const App = () => {
       setHasDroppedMatch(true); 
       if (isBurnerLit) {
         setTaskPhase('adjust_gas');
-        setMessage('【炎の調整モード】ズーム画面に移行しました。ガス調節ねじを回して、火の大きさを適切（30%以上）にしてください。');
+        setMessage('【炎の調整モード】マッチを捨てました。ガス調節ねじをさらに回して、火の大きさを適切（30%以上）に整えてください。');
       } else {
         setMessage('【点火】マッチを水に捨てました。必要ならもう一度マッチを擦ってください。');
       }
@@ -435,7 +545,7 @@ const App = () => {
     if (gameState !== 'playing') return;
     
     if (!mainValve) {
-      if (taskPhase.startsWith('extinguish') || taskPhase.startsWith('cleanup')) return triggerGameOver("【重大な手順違反】消火・片付け中に元栓を開けました！生ガスが漏れ出し大変危険です！", "gasLeak");
+      if (taskPhase.startsWith('extinguish') || taskPhase.startsWith('cleanup') || taskPhase === 'burning') return triggerGameOver("【重大な手順違反】消火・片付け・実験中に元栓を開けました！生ガスが漏れ出し大変危険です！", "gasLeak");
       if (!isHoseConnected) return triggerGameOver("【大事故】ゴム管を接続せずに元栓を開けました！生ガスが室内に充満します！", "gasLeak");
       if (taskPhase === 'prepare_water' || taskPhase === 'prepare_hose') return triggerGameOver("【手順違反】準備が完了する前に元栓を開けました。", "procedure");
       
@@ -457,7 +567,7 @@ const App = () => {
     if (gameState !== 'playing') return;
 
     if (!cock) {
-      if (taskPhase.startsWith('extinguish') || taskPhase.startsWith('cleanup')) return triggerGameOver("【重大な手順違反】消火・片付け中にコックを開けました！生ガスが漏れ出し大変危険です！", "gasLeak");
+      if (taskPhase.startsWith('extinguish') || taskPhase.startsWith('cleanup') || taskPhase === 'burning') return triggerGameOver("【重大な手順違反】消火・片付け・実験中にコックを開けました！生ガスが漏れ出し大変危険です！", "gasLeak");
       if (!mainValve) return triggerGameOver("【手順違反】元栓より先にコックを開きました。", "procedure");
       
       setCock(true); 
@@ -492,13 +602,17 @@ const App = () => {
 
   const updateGas = (newVal) => {
     if (gameState !== 'playing') return;
-
-    if (hasMatchInHand && isBurnerLit) {
-       return triggerGameOver("【火災の危険】火のついたマッチを持ったままねじを操作しようとしました！衣服への引火の危険があります。先に左下の燃えかす入れをタップしてマッチを捨ててください！", "fire");
-    }
+    if (taskPhase === 'burning') return setMessage('【警告】現在は実験中です。ねじの操作は不要です。終了したら下のボタンを押してください。');
 
     if (newVal > gasLevel) { 
-      if (taskPhase.startsWith('extinguish')) return triggerGameOver("【消火失敗】消火手順中にガスを開きました。火災の危険があります！", "fire");
+      if (taskPhase === 'inspect') {
+          return setMessage('【警告】今は点検中です。ねじは「0%に閉める」方向（右）に回してください！');
+      }
+
+      if (taskPhase.startsWith('extinguish')) {
+          return setMessage("【警告】消火手順中です。ねじを開けないでください。閉める方向（右）に回してください。");
+      }
+      
       if (!isHoseConnected && !taskPhase.startsWith('inspect') && !taskPhase.startsWith('cleanup') && !taskPhase.startsWith('emergency')) {
          setGasLevel(newVal); return setMessage('管が繋がっていないのでガスは出ませんが、不適切な操作です。');
       }
@@ -506,25 +620,33 @@ const App = () => {
         return triggerGameOver("【ガス漏れ】マッチをつける前にガス調節ねじを開きました。爆発の危険があります！", "gasLeak");
       }
       
-      // 点火の瞬間
       if (hasMatchInHand && !isBurnerLit && newVal > 0) {
         if (isHoseConnected && mainValve && cock) {
           setIsBurnerLit(true);
           setTaskPhase('adjust_match');
-          setMessage('点火成功！【重要】火のついたマッチを持ったままです！まずは左下の「燃えかす入れ」をタップして確実に捨ててください！');
+          setMessage('点火成功！【重要】火のついたマッチを持ったままです！火の大きさを整えたら、燃えかす入れをタップしてマッチを捨ててください。');
         }
       }
     }
     
     if (newVal < gasLevel) {
-      if (taskPhase.startsWith('extinguish') || taskPhase.startsWith('emergency')) { 
-          if (airLevel > 0 && isBurnerLit) {
-              return triggerGameOver("【逆火の危険】空気調節ねじが開いたままガスを減らそうとしました！炎が内部に入り込み大変危険です！必ず先に空気を0にして炎を赤くしてください。", "backfire");
+      if (hasMatchInHand && isBurnerLit) {
+          return triggerGameOver("【火災の危険】火のついたマッチを持ったままガスねじを閉めようとしました！衣服に引火する危険があります。まずはマッチを捨ててください！", "fire");
+      }
+
+      if (airLevel > 0 && isBurnerLit) {
+          if (newVal === 0 || taskPhase.startsWith('extinguish')) {
+              return triggerGameOver("【逆火の危険】空気調節ねじが開いたままガスを絞ろうとしました！炎が内部に入り込み大変危険です！必ず先に空気を0にして炎を赤くしてください。", "backfire");
           }
-          if (newVal === 0 && isBurnerLit) {
-              setIsBurnerLit(false); 
+      }
+
+      if (newVal === 0 && isBurnerLit) {
+          setIsBurnerLit(false); 
+          if (taskPhase === 'extinguish_gas' || taskPhase.startsWith('emergency')) {
               setTaskPhase('extinguish_cock');
               setMessage('【消火】火が消え、全体画面に戻りました。コックを閉めてください（垂直にする）。');
+          } else {
+              return triggerGameOver("【ガス漏れ】不適切なタイミングで火を消してしまいました。元栓とコックが開いたままで生ガスが漏れ出しています！", "gasLeak");
           }
       }
     }
@@ -533,12 +655,17 @@ const App = () => {
 
   const updateAir = (newVal) => {
     if (gameState !== 'playing') return;
+    if (taskPhase === 'burning') return setMessage('【警告】現在は実験中です。ねじの操作は不要です。終了したら下のボタンを押してください。');
     
-    if (hasMatchInHand) {
-       return triggerGameOver("【火災の危険】火のついたマッチを持ったままねじを操作しようとしました！衣服への引火の危険があります。先に左下の燃えかす入れをタップしてマッチを捨ててください！", "fire");
-    }
-
     if (newVal > airLevel) {
+        if (taskPhase === 'inspect') {
+            return setMessage('【警告】今は点検中です。ねじは「0%に閉める」方向（右）に回してください！');
+        }
+
+        if (hasMatchInHand && isBurnerLit) {
+           return triggerGameOver("【火災の危険】火のついたマッチを持ったまま上部の空気ねじを操作しようとしました！衣服への引火の危険があります。先にマッチを捨ててください！", "fire");
+        }
+
         if (taskPhase.startsWith('prepare') || taskPhase.startsWith('ignite')) {
             return triggerGameOver("【爆発の危険】点火前に空気調節ねじを開きました。着火時に内部で爆発する恐れがあります！", "explosion");
         }
@@ -546,7 +673,7 @@ const App = () => {
             return triggerGameOver("【手順違反】炎の大きさが不十分なまま空気を混ぜると逆火の危険があります。先にガス調節ねじで炎の大きさを適切にしてください。", "procedure");
         }
         if (taskPhase.startsWith('extinguish')) {
-            return triggerGameOver("【重大な手順違反】消火手順中に空気を再び開けました！不安定な燃焼や逆火の原因となり大変危険です。", "procedure");
+            return setMessage("【警告】消火手順中です。ねじを開けないでください。閉める方向（右）に回してください。");
         }
     }
 
@@ -569,43 +696,35 @@ const App = () => {
 
 
   useEffect(() => {
-    if (!hasMatchInHand && isBurnerLit && taskPhase === 'adjust_air') { 
-      const ratio = airLevel / (gasLevel || 1);
-      if (gasLevel >= 30 && ratio >= 0.85 && ratio <= 1.15) setIsPerfectFlame(true);
-      else setIsPerfectFlame(false);
-    } else setIsPerfectFlame(false);
-  }, [gasLevel, airLevel, hasMatchInHand, isBurnerLit, taskPhase]);
-
-  useEffect(() => {
     let timer;
-    if (isPerfectFlame) {
+    if (isFlamePerfect && gameState === 'playing') {
       timer = setTimeout(() => {
         if (gameMode === 'trouble' && scenario === 'wind') {
           setIsBurnerLit(false); setTaskPhase('emergency'); setEmergencyTimer(10);
-          setMessage('【緊急事態】窓からの突風で火が消えました！！生ガスが出続けています！10秒以内にガスをすべて止めてください！');
+          setMessage('【緊急事態】実験中、窓からの突風で火が消えました！！生ガスが出続けています！10秒以内にガスをすべて止めてください！');
         } else {
-          setTaskPhase('extinguish_air');
-          setMessage('素晴らしい！内炎が見える青い炎になりました。次は【消火】の手順です。まずは空気調節ねじを完全に閉めてください。');
+          setTaskPhase('burning');
+          setMessage('【着火完了】素晴らしい！青い炎が安定しました。実験が終わったら「消火手順へ進む」を押してください。');
         }
-        setIsPerfectFlame(false);
       }, 3000);
     }
     return () => clearTimeout(timer);
-  }, [isPerfectFlame, gameMode, scenario]);
+  }, [isFlamePerfect, gameMode, scenario, gameState]);
+
 
   useEffect(() => {
     let timerId;
-    if (taskPhase === 'emergency' && emergencyTimer > 0) {
+    if (taskPhase === 'emergency' && emergencyTimer > 0 && gameState === 'playing') {
       timerId = setTimeout(() => setEmergencyTimer(prev => prev - 1), 1000);
-    } else if (taskPhase === 'emergency' && emergencyTimer === 0) {
+    } else if (taskPhase === 'emergency' && emergencyTimer === 0 && gameState === 'playing') {
       triggerGameOver("【大惨事】火が消えた後、ガスを止めるのが遅れました。室内に充満したガスに引火し大爆発しました！", "explosion");
     }
     return () => clearTimeout(timerId);
-  }, [taskPhase, emergencyTimer]);
+  }, [taskPhase, emergencyTimer, gameState]);
 
   useEffect(() => {
     if (taskPhase === 'emergency') {
-      if (!cock || !mainValve) {
+      if (!cock || !mainValve || gasLevel === 0) {
         setTaskPhase('emergency_safe'); 
         setEmergencyTimer(null);
         setMessage('【緊急事態回避】素晴らしい判断です！ガスの供給を遮断し被害を防ぎました。落ち着いて残りのねじや栓を全て閉めてください。');
@@ -633,11 +752,11 @@ const App = () => {
     const ratio = gasLevel > 0 ? airLevel / gasLevel : 0;
     
     let outerColor = "rgba(255, 120, 0, 0.9)"; let innerColor = "rgba(255, 220, 100, 0.9)";
-    let isPerfect = false; let flameWidth = 26; let animationClass = "animate-flicker";
+    let flameWidth = 26; let animationClass = "animate-flicker";
     
     if (gasLevel >= 30 && ratio >= 0.85 && ratio <= 1.15) {
       outerColor = "rgba(100, 150, 255, 0.8)"; innerColor = "rgba(180, 240, 255, 0.95)";
-      isPerfect = true; flameWidth = 20; animationClass = "";
+      flameWidth = 20; animationClass = "";
     } else if (ratio > 1.2) {
       outerColor = "rgba(50, 50, 255, 0.6)"; innerColor = "rgba(150, 150, 255, 0.8)";
       flameWidth = 16; animationClass = "animate-shake"; 
@@ -711,9 +830,11 @@ const App = () => {
           <ellipse cx="150" cy="150" rx="15" ry="5" fill="#cbd5e1" stroke="#1e293b" strokeWidth="3"/>
           
           {isBurnerLit && hFlame > 0 && (
-            <g transform="translate(150, 150)" className={animationClass} style={{ mixBlendMode: 'screen' }}>
-              <path d={`M -${flameWidth} 0 C -${flameWidth} -${hFlame*0.5}, 0 -${hFlame*0.8}, 0 -${hFlame} C 0 -${hFlame*0.8}, ${flameWidth} -${hFlame*0.5}, ${flameWidth} 0 Z`} fill={outerColor} filter="url(#blur-md)" className="transition-all duration-200"/>
-              {isPerfect ? <path d={`M -6 0 L 0 -${hFlame*0.4} L 6 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/> : <path d={`M -${flameWidth*0.7} 0 Q 0 -${hFlame*0.6}, ${flameWidth*0.7} 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/>}
+            <g transform="translate(150, 150)" style={{ mixBlendMode: 'screen' }}>
+              <g className={animationClass} style={{ transformOrigin: '0 0' }}>
+                <path d={`M -${flameWidth} 0 C -${flameWidth} -${hFlame*0.5}, 0 -${hFlame*0.8}, 0 -${hFlame} C 0 -${hFlame*0.8}, ${flameWidth} -${hFlame*0.5}, ${flameWidth} 0 Z`} fill={outerColor} filter="url(#blur-md)" className="transition-all duration-200"/>
+                {isPerfect ? <path d={`M -6 0 L 0 -${hFlame*0.4} L 6 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/> : <path d={`M -${flameWidth*0.7} 0 Q 0 -${hFlame*0.6}, ${flameWidth*0.7} 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/>}
+              </g>
             </g>
           )}
 
@@ -729,7 +850,7 @@ const App = () => {
         {hasMatchInHand && (
           <g transform={isBurnerLit ? "translate(240, 300) rotate(30)" : "translate(180, 140) rotate(-15)"} className="transition-all duration-700 ease-in-out">
             <rect x="0" y="0" width="70" height="6" fill="#78350f" rx="3" />
-            <circle cx="5" cy="3" r="16" fill="#f97316" filter="url(#blur-md)" className="animate-flicker" style={{ mixBlendMode: 'screen' }}/>
+            <circle cx="5" cy="3" r="16" fill="#f97316" filter="url(#blur-md)" className="animate-opacity-flicker" style={{ mixBlendMode: 'screen' }}/>
             <circle cx="5" cy="3" r="6" fill="#fef08a" />
           </g>
         )}
@@ -737,17 +858,15 @@ const App = () => {
     );
   };
 
-  if (gameState === 'title') return <><style>{customStyles}</style><TitleScreen onStart={startGame} onTutorial={() => setGameState('tutorial')} /></>;
-  if (gameState === 'tutorial') return <><style>{customStyles}</style><TutorialScreen onBack={() => setGameState('title')} /></>;
-  if (gameState === 'gameover') return <><style>{customStyles}</style><GameOverScreen reason={gameOverInfo.reason} errorType={gameOverInfo.type} onRetry={() => setGameState('title')} /></>;
-  if (gameState === 'result') return <><style>{customStyles}</style><ResultScreen timeElapsed={timeElapsed} gameMode={gameMode} onRetry={() => setGameState('title')} /></>;
+  if (gameState === 'title') return <TitleScreen onStart={startGame} onTutorial={() => setGameState('tutorial')} />;
+  if (gameState === 'tutorial') return <TutorialScreen onBack={() => setGameState('title')} />;
+  if (gameState === 'gameover') return <GameOverScreen reason={gameOverInfo.reason} errorType={gameOverInfo.type} onRetry={() => setGameState('title')} />;
+  if (gameState === 'result') return <ResultScreen timeElapsed={timeElapsed} gameMode={gameMode} onRetry={() => setGameState('title')} />;
 
   return (
-    <>
-      <style>{customStyles}</style>
-      <div className="flex flex-col lg:flex-row h-[100dvh] w-full bg-slate-200 text-slate-800 font-sans overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-[100dvh] w-full bg-slate-200 text-slate-800 font-sans overflow-hidden px-2 py-2 sm:p-0">
         
-        <div className="w-full lg:w-1/2 h-[45dvh] lg:h-full bg-slate-900 relative flex flex-col items-center justify-end shrink-0 shadow-[inset_0_-10px_30px_rgba(0,0,0,0.7)] z-10 overflow-hidden">
+        <div className="w-full lg:w-1/2 h-[45dvh] lg:h-full bg-slate-900 relative flex flex-col items-center justify-end shrink-0 shadow-[inset_0_-10px_30px_rgba(0,0,0,0.7)] z-10 overflow-hidden rounded-t-2xl sm:rounded-none">
           
           <div className={`absolute top-2 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 p-3 sm:p-5 rounded-3xl shadow-2xl border-l-[8px] sm:border-l-[12px] z-30 transition-colors ${taskPhase.startsWith('emergency') ? 'bg-red-950 border-red-500' : 'bg-white border-blue-500'}`}>
             <p className={`font-black text-xs sm:text-lg leading-relaxed flex items-start gap-2 sm:gap-3 ${taskPhase.startsWith('emergency') ? 'text-red-200' : 'text-slate-800'}`}>
@@ -770,7 +889,7 @@ const App = () => {
             onClick={hasMatchInHand ? handleWaterOrDisposeMatch : undefined}
             className={`absolute bottom-2 sm:bottom-6 left-2 sm:left-6 z-10 flex flex-col items-center transition-all duration-700 ${hasMatchInHand ? 'cursor-pointer hover:scale-110 animate-pulse' : ''} ${isZoomMode ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}
           >
-            <div className={`w-16 h-12 sm:w-28 sm:h-20 bg-slate-300 rounded-b-xl sm:rounded-b-2xl border-4 relative overflow-hidden shadow-2xl ${hasMatchInHand && isBurnerLit ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)]' : 'border-slate-500'}`}>
+            <div className={`w-16 h-12 sm:w-28 sm:h-20 bg-slate-300 rounded-b-xl sm:rounded-b-2xl border-4 relative overflow-hidden shadow-2xl ${hasMatchInHand && isBurnerLit ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)]' : 'border-slate-500'} ${taskPhase === 'prepare_water' || taskPhase === 'adjust_match' ? 'highlight-target' : ''}`}>
               <div className="w-full h-2 sm:h-3 bg-slate-600 absolute top-0 z-20"></div>
               
               {hasDroppedMatch && (
@@ -789,7 +908,7 @@ const App = () => {
           </div>
         </div>
 
-        <div className={`w-full lg:w-1/2 h-[55dvh] lg:h-full bg-slate-100 p-4 sm:p-8 overflow-y-auto shadow-2xl z-20 hide-scrollbar border-l-8 ${taskPhase.startsWith('emergency') ? 'border-red-500' : 'border-slate-300'}`}>
+        <div className={`w-full lg:w-1/2 h-[55dvh] lg:h-full bg-slate-100 p-4 sm:p-8 overflow-y-auto shadow-2xl z-20 hide-scrollbar border-l-8 ${taskPhase.startsWith('emergency') ? 'border-red-500' : 'border-slate-300'} rounded-b-2xl sm:rounded-none`}>
           
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end border-b-4 border-slate-300 pb-3 sm:pb-4 mb-4 sm:mb-6 gap-3 sm:gap-4">
             <h2 className="text-xl sm:text-4xl font-black text-slate-800 tracking-wider">操作パネル</h2>
@@ -810,50 +929,95 @@ const App = () => {
 
           <div className="max-w-2xl mx-auto pb-16 relative">
             
+            {gameMode === 'trouble' && (
+                <div className="bg-slate-200 p-3 sm:p-4 rounded-2xl mb-6 border-4 border-slate-300 shadow-inner flex flex-col gap-2">
+                    <h3 className="font-black text-slate-700 text-sm sm:text-base flex items-center gap-2"><Wrench size={18}/> 道具箱</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => setSelectedTool('hand')} className={`flex-1 py-2 rounded-xl font-bold flex flex-col items-center gap-1 border-b-4 transition-all ${selectedTool === 'hand' ? 'bg-amber-200 border-amber-500 text-amber-900 translate-y-1 border-b-0 shadow-inner' : 'bg-white border-slate-400 text-slate-600 hover:bg-slate-50 shadow-md'}`}>
+                            <Hand size={24} />素手
+                        </button>
+                        <button onClick={() => setSelectedTool('cloth')} className={`flex-1 py-2 rounded-xl font-bold flex flex-col items-center gap-1 border-b-4 transition-all ${selectedTool === 'cloth' ? 'bg-amber-200 border-amber-500 text-amber-900 translate-y-1 border-b-0 shadow-inner' : 'bg-white border-slate-400 text-slate-600 hover:bg-slate-50 shadow-md'}`}>
+                            <Eraser size={24} />雑巾
+                        </button>
+                        <button onClick={() => setSelectedTool('pliers')} className={`flex-1 py-2 rounded-xl font-bold flex flex-col items-center gap-1 border-b-4 transition-all ${selectedTool === 'pliers' ? 'bg-amber-200 border-amber-500 text-amber-900 translate-y-1 border-b-0 shadow-inner' : 'bg-white border-slate-400 text-slate-600 hover:bg-slate-50 shadow-md'}`}>
+                            <Wrench size={24} />ペンチ
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isZoomMode ? (
               <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="bg-blue-50 border-4 border-blue-300 p-4 sm:p-6 rounded-3xl shadow-sm text-center">
+                <div className={`bg-blue-50 border-4 border-blue-300 p-4 sm:p-6 rounded-3xl shadow-sm text-center transition-all ${taskPhase === 'burning' ? 'ring-4 ring-orange-400 ring-offset-2 bg-orange-50 border-orange-300' : ''}`}>
                   <h3 className="text-xl sm:text-2xl font-black text-blue-800 mb-2 flex items-center justify-center gap-2">
-                    <FlameIcon className="text-red-500"/> 炎の調整専用モード
+                    <FlameIcon className={`${taskPhase === 'burning' ? 'text-orange-500 animate-pulse' : 'text-red-500'}`}/> 
+                    {taskPhase === 'burning' ? '🔥 実験中...' : '炎の調整専用モード'}
                   </h3>
-                  <p className="text-sm sm:text-lg font-bold text-slate-700">
-                    ガスねじで<span className="text-red-600">大きさ</span>を、空気ねじで<span className="text-blue-600">色</span>を調整します。<br/>
-                    消火する時は、空気を0にして炎を赤くし、ガスを0にして火を消します。
+                  <p className="text-sm sm:text-lg font-bold text-slate-700 whitespace-pre-line">
+                    {taskPhase === 'burning' 
+                      ? '青い炎が安定しています。バーナーを使った実験を行っています...\n実験が終了したら下のボタンを押してください。'
+                      : 'ガスねじで大きさを、空気ねじで色を調整します。\n消火する時は、空気を0にして炎を赤くし、ガスを0にして火を消します。'}
                   </p>
                 </div>
-                <DragDial label="空気調節ねじ(上)" value={airLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" disabled={false} />
-                <DragDial label="ガス調節ねじ(下)" value={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" disabled={false} />
+                
+                <DragDial 
+                    label="空気調節ねじ(上)" value={airLevel} visualValue={airLevel + gasLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" 
+                    disabled={taskPhase === 'burning'} stuckLevel={stuckState.air} onTryStuck={() => handleTryStuck('air')} 
+                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw' || taskPhase === 'adjust_air' || taskPhase === 'extinguish_air'} 
+                />
+                <DragDial 
+                    label="ガス調節ねじ(下)" value={gasLevel} visualValue={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" 
+                    disabled={taskPhase === 'burning'} stuckLevel={stuckState.gas} onTryStuck={() => handleTryStuck('gas')} 
+                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw' || taskPhase === 'ignite_gas' || taskPhase === 'adjust_gas' || taskPhase === 'extinguish_gas'} 
+                />
+                
+                {taskPhase === 'burning' && (
+                    <button onClick={() => {
+                        setTaskPhase('extinguish_air');
+                        setMessage('【消火手順】実験が終了しました。まずは「空気調節ねじ(上)」を完全に閉めてください。');
+                    }} className="w-full py-4 sm:py-6 mt-4 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-black text-xl sm:text-2xl shadow-xl flex items-center justify-center gap-2 sm:gap-3 border-b-4 sm:border-b-[6px] border-orange-800 active:translate-y-2 active:border-b-0 transition-all highlight-target">
+                        <FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" strokeWidth={3} /> 実験終了：消火手順へ進む
+                    </button>
+                )}
               </div>
             ) : (
-              <div className="space-y-4 sm:space-y-8 animate-in fade-in duration-500">
+              <div className="space-y-4 sm:space-y-8 animate-in fade-in duration-500 mx-2 sm:mx-4">
                 <div className="grid grid-cols-2 gap-3 sm:gap-5">
                     <div className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center justify-center gap-1 sm:gap-3 border-4 transition-all shadow-sm ${isCheckedScrew || taskPhase.startsWith('emergency') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-yellow-50 border-yellow-400 text-yellow-800'}`}>
                         <Wrench className="w-6 h-6 sm:w-8 sm:h-8" /> {isCheckedScrew ? 'ねじ点検済' : 'ドラムを回して0%に'}
                     </div>
-                    <button onClick={handleWaterOrDisposeMatch} disabled={(waterInAshtray && !(hasMatchInHand && isBurnerLit)) || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect')} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${hasMatchInHand && isBurnerLit ? 'bg-rose-100 border-rose-500 text-rose-900 animate-pulse hover:bg-rose-200 active:translate-y-1 active:border-b-[2px]' : waterInAshtray || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'}`}>
+                    <button onClick={handleWaterOrDisposeMatch} disabled={(waterInAshtray && !(hasMatchInHand && isBurnerLit)) || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect')} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${hasMatchInHand && isBurnerLit ? 'bg-rose-100 border-rose-500 text-rose-900 animate-pulse hover:bg-rose-200 active:translate-y-1 active:border-b-[2px]' : waterInAshtray || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'} ${taskPhase === 'prepare_water' ? 'highlight-target' : ''}`}>
                         {hasMatchInHand && isBurnerLit ? <FlameIcon className="w-6 h-6 sm:w-8 sm:h-8 text-rose-600"/> : <Droplets className="w-6 h-6 sm:w-8 sm:h-8" />} 
                         {hasMatchInHand && isBurnerLit ? 'マッチを水に捨てる' : waterInAshtray ? '水 準備完了' : '燃えかす入れに水'}
                     </button>
-                    <button onClick={handleHose} disabled={taskPhase.startsWith('emergency') || taskPhase === 'inspect'} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${isHoseConnected || taskPhase.startsWith('emergency') || taskPhase === 'inspect' ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'}`}>
+                    <button onClick={handleHose} disabled={taskPhase.startsWith('emergency') || taskPhase === 'inspect'} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${isHoseConnected || taskPhase.startsWith('emergency') || taskPhase === 'inspect' ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'} ${taskPhase === 'prepare_hose' || taskPhase === 'cleanup_hose' ? 'highlight-target' : ''}`}>
                         <PlugZap className="w-6 h-6 sm:w-8 sm:h-8" /> {isHoseConnected ? 'ゴム管接続済' : 'ゴム管を繋ぐ'}
                     </button>
-                    <button onClick={handleMatch} disabled={hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect')} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-orange-100 border-orange-500 text-orange-900 hover:bg-orange-200 active:translate-y-1 active:border-b-[2px]'}`}>
+                    <button onClick={handleMatch} disabled={hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect')} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-orange-100 border-orange-500 text-orange-900 hover:bg-orange-200 active:translate-y-1 active:border-b-[2px]'} ${taskPhase === 'ignite_match' ? 'highlight-target' : ''}`}>
                         <FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" /> {hasMatchInHand ? 'マッチ着火済' : 'マッチをつける'}
                     </button>
                 </div>
 
                 <div className={`flex justify-evenly gap-3 sm:gap-6 bg-slate-100 p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] border-4 shadow-sm ${taskPhase.startsWith('emergency') ? 'border-red-400' : 'border-slate-300'}`}>
-                  <RealValve isOpen={mainValve} onClick={handleMainValve} label="元栓" disabled={!isHoseConnected} isCock={false} />
-                  <RealValve isOpen={cock} onClick={handleCock} label="コック" disabled={!isHoseConnected} isCock={true} />
+                  <RealValve isOpen={mainValve} onClick={handleMainValve} label="元栓" disabled={!isHoseConnected} isCock={false} highlight={taskPhase === 'ignite_main' || taskPhase === 'extinguish_main'} />
+                  <RealValve isOpen={cock} onClick={handleCock} label="コック" disabled={!isHoseConnected} isCock={true} highlight={taskPhase === 'ignite_cock' || taskPhase === 'extinguish_cock'} />
                 </div>
 
                 <div className="space-y-4 sm:space-y-8">
-                  <DragDial label="空気調節ねじ(上)" value={airLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" disabled={taskPhase === 'emergency' && airLevel === 0} />
-                  <DragDial label="ガス調節ねじ(下)" value={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" disabled={false} />
+                  <DragDial 
+                    label="空気調節ねじ(上)" value={airLevel} visualValue={airLevel + gasLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" 
+                    disabled={taskPhase === 'emergency' && airLevel === 0} stuckLevel={stuckState.air} onTryStuck={() => handleTryStuck('air')} 
+                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw'} 
+                  />
+                  <DragDial 
+                    label="ガス調節ねじ(下)" value={gasLevel} visualValue={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" 
+                    disabled={false} stuckLevel={stuckState.gas} onTryStuck={() => handleTryStuck('gas')} 
+                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw'} 
+                  />
                 </div>
 
                 {taskPhase.startsWith('cleanup') && (
-                    <button onClick={handleFinish} className="w-full py-5 sm:py-8 mt-6 sm:mt-10 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl sm:rounded-3xl font-black text-xl sm:text-3xl shadow-xl animate-bounce flex items-center justify-center gap-2 sm:gap-4 border-b-4 sm:border-b-[8px] border-slate-950 active:translate-y-2 active:border-b-0 transition-all">
+                    <button onClick={handleFinish} className="w-full py-5 sm:py-8 mt-6 sm:mt-10 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl sm:rounded-3xl font-black text-xl sm:text-3xl shadow-xl flex items-center justify-center gap-2 sm:gap-4 border-b-4 sm:border-b-[8px] border-slate-950 active:translate-y-2 active:border-b-0 transition-all highlight-target">
                         <LogOut className="w-6 h-6 sm:w-10 sm:h-10" strokeWidth={3} /> 全ての片付けを完了
                     </button>
                 )}
@@ -861,8 +1025,7 @@ const App = () => {
             )}
           </div>
         </div>
-      </div>
-    </>
+    </div>
   );
 };
         
