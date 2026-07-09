@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ガスバーナー操作免許センター Inclusive Edition</title>
+    <title>ガスバーナー操作免許センター Ver 26.8</title>
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -14,41 +14,42 @@
 
     <!-- アニメーション・UI用CSS -->
     <style>
-        @keyframes flicker { 0%, 100% { opacity: 1; transform: scale(1) translateY(0); } 50% { opacity: 0.85; transform: scale(1.05) translateY(-2px); } }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
-        @keyframes opacity-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        @keyframes gas-drift { 0% { transform: translate(0, 0) scale(1); opacity: 0.3; } 50% { transform: translate(20px, -20px) scale(1.2); opacity: 0.6; } 100% { transform: translate(-20px, -40px) scale(1.5); opacity: 0; } }
-        @keyframes drop-match { 0% { transform: translateY(-30px) rotate(-30deg) scale(1.2); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(0) rotate(15deg) scale(1); opacity: 1; } }
+        /* 負荷のかかる transform を廃止し、opacity のみで安全にアニメーション */
+        @keyframes opacity-flicker { 
+            0%, 100% { opacity: 1; } 
+            50% { opacity: 0.8; } 
+        }
+        @keyframes drop-match { 
+            0% { transform: translateY(-30px) rotate(-30deg) scale(1.2); opacity: 0; } 
+            50% { opacity: 1; } 
+            100% { transform: translateY(0) rotate(15deg) scale(1); opacity: 1; } 
+        }
         
-        .animate-flicker { animation: flicker 0.12s infinite alternate; }
-        .animate-shake { animation: shake 0.08s infinite alternate; }
         .animate-opacity-flicker { animation: opacity-flicker 0.12s infinite alternate; }
-        .animate-gas { animation: gas-drift 4s infinite linear; }
         .animate-drop { animation: drop-match 0.5s ease-out forwards; }
         
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .touch-none { touch-action: none; user-select: none; -webkit-user-select: none; }
 
-        /* インクルーシブデザイン用ハイライトアニメーション */
+        /* インクルーシブデザイン用ハイライトアニメーション（背景色の強制上書きを削除） */
         @keyframes pulse-highlight {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.8); }
             50% { box-shadow: 0 0 0 12px rgba(234, 179, 8, 0); }
         }
         .highlight-target {
             animation: pulse-highlight 2s infinite;
             border-color: #eab308 !important;
-            background-color: #fefce8 !important;
         }
     </style>
 </head>
-<body class="bg-slate-900 m-0 p-0 text-slate-800 font-sans">
-    <div id="root"></div>
+<body class="bg-slate-900 m-0 p-0 text-slate-800 font-sans fixed inset-0 w-full h-full overflow-hidden overscroll-none">
+    <div id="root" class="w-full h-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- カスタムアイコンコンポーネント (外部ライブラリ完全排除) ---
+        // --- カスタムアイコンコンポーネント ---
         const Icon = ({ d, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {d}
@@ -73,20 +74,26 @@
         const Hand = (props) => <Icon d={<><path d="M18 11V6a2 2 0 0 0-4 0v4h-2V4a2 2 0 0 0-4 0v6H6V5a2 2 0 0 0-4 0v11a8 8 0 0 0 16 0z"/></>} {...props} />;
         const Eraser = (props) => <Icon d={<><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>} {...props} />;
 
-// --- Utility: Hold Button ---
-const HoldButton = ({ onAction, disabled, className, children }) => {
+// --- Utility: Hold Button (スタッタリング完全防止機構付き) ---
+const HoldButton = ({ onAction, onActionStart, onActionEnd, disabled, className, children }) => {
   const timerRef = useRef(null);
   const actionRef = useRef(onAction);
 
   useEffect(() => { actionRef.current = onAction; }, [onAction]);
 
   const stopHold = () => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (timerRef.current) { 
+        clearInterval(timerRef.current); 
+        timerRef.current = null; 
+        if (onActionEnd) onActionEnd(); // 長押し終了を通知
+    }
   };
 
   const startHold = (e) => {
     if (e.cancelable) e.preventDefault();
     if (disabled) return;
+    
+    if (onActionStart) onActionStart(); // 長押し開始を通知し、Reactの同期をロック
     actionRef.current(); 
     stopHold(); 
     timerRef.current = setInterval(() => { actionRef.current(); }, 60); 
@@ -95,7 +102,11 @@ const HoldButton = ({ onAction, disabled, className, children }) => {
   useEffect(() => { return stopHold; }, []);
 
   return (
-    <button onTouchStart={startHold} onTouchEnd={stopHold} onTouchCancel={stopHold} onMouseDown={startHold} onMouseUp={stopHold} onMouseLeave={stopHold} disabled={disabled} className={`${className} touch-none select-none`}>
+    <button 
+      onTouchStart={startHold} onTouchEnd={stopHold} onTouchCancel={stopHold} 
+      onMouseDown={startHold} onMouseUp={stopHold} onMouseLeave={stopHold} 
+      disabled={disabled} className={`${className} touch-none select-none`}
+    >
       {children}
     </button>
   );
@@ -113,18 +124,17 @@ const RealValve = ({ isOpen, onClick, label, isCock, disabled, highlight }) => {
             <linearGradient id="pipeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#94a3b8" /><stop offset="30%" stopColor="#f8fafc" /><stop offset="70%" stopColor="#e2e8f0" /><stop offset="100%" stopColor="#475569" />
             </linearGradient>
-            <filter id="valve-shadow"><feDropShadow dx="2" dy="4" stdDeviation="3" floodOpacity="0.4"/></filter>
           </defs>
           <rect x="0" y="45" width="120" height="30" fill="url(#pipeGrad)" stroke="#64748b" strokeWidth="1" />
           <g style={{ transformOrigin: '60px 60px', transform: `rotate(${rotation}deg)`, transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
             {isCock ? (
-              <g filter="url(#valve-shadow)">
+              <g>
                 <circle cx="60" cy="60" r="18" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="2" />
                 <circle cx="60" cy="60" r="8" fill="#cbd5e1" />
                 <path d="M 52 60 L 42 10 Q 60 5 78 10 L 68 60 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="2" />
               </g>
             ) : (
-              <g filter="url(#valve-shadow)">
+              <g>
                 <circle cx="60" cy="60" r="30" fill="#475569" stroke="#1e293b" strokeWidth="2" />
                 <circle cx="60" cy="60" r="26" fill="#334155" />
                 <rect x="54" y="34" width="12" height="52" rx="2" fill="#cbd5e1" />
@@ -144,12 +154,12 @@ const RealValve = ({ isOpen, onClick, label, isCock, disabled, highlight }) => {
 // --- DragDial Component ---
 const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disabled, stuckLevel, onTryStuck, highlight }) => {
   const valueRef = useRef(value); 
-  const isDragging = useRef(false);
+  const isInteracting = useRef(false); // ★ドラッグだけでなくボタン長押しも含めた排他ロック
   const lastX = useRef(0);
   const isStuckWarningTriggered = useRef(false); 
   
-  // ★親システムからの値をローカルに強制同期させ、ドラッグすっぽ抜けバグを完全防止
-  if (!isDragging.current) {
+  // ★インタラクトしていない時のみ親の値をローカルに同期（ガタつき完全防止）
+  if (!isInteracting.current) {
       valueRef.current = value;
   }
 
@@ -167,19 +177,26 @@ const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disab
         triggerStuck();
         return;
     }
-    isDragging.current = true;
+    isInteracting.current = true;
     lastX.current = e.clientX;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e) => {
-    if (!isDragging.current || disabled) return;
+    if (!isInteracting.current || disabled) return;
     const deltaX = e.clientX - lastX.current;
+    
+    // 異常なジャンプを弾く安全装置
+    if (Math.abs(deltaX) > 80) {
+        lastX.current = e.clientX;
+        return;
+    }
+    
     lastX.current = e.clientX;
     
     if (Math.abs(deltaX) > 0) {
         if (stuckLevel && stuckLevel !== 'none') {
-            isDragging.current = false;
+            isInteracting.current = false;
             triggerStuck();
             return;
         }
@@ -192,11 +209,12 @@ const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disab
   };
 
   const handlePointerUp = (e) => {
-    isDragging.current = false;
+    isInteracting.current = false;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     valueRef.current = value;
   };
 
+  // ボタン長押し時のアクション
   const handleHoldAction = (delta) => {
     if (stuckLevel && stuckLevel !== 'none') {
         triggerStuck();
@@ -233,10 +251,18 @@ const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disab
         </div>
       </div>
       <div className="flex gap-2 sm:gap-4">
-        <HoldButton onAction={() => handleHoldAction(-2)} className="flex-1 py-3 sm:py-4 bg-slate-100 hover:bg-slate-200 border-b-[4px] sm:border-b-[6px] border-slate-400 rounded-xl sm:rounded-2xl font-black text-sm sm:text-xl flex flex-col items-center shadow-md active:translate-y-1 active:border-b-2 transition-all">
+        <HoldButton 
+            onAction={() => handleHoldAction(-2)} 
+            onActionStart={() => { isInteracting.current = true; }} 
+            onActionEnd={() => { isInteracting.current = false; valueRef.current = value; }}
+            className="flex-1 py-3 sm:py-4 bg-slate-100 hover:bg-slate-200 border-b-[4px] sm:border-b-[6px] border-slate-400 rounded-xl sm:rounded-2xl font-black text-sm sm:text-xl flex flex-col items-center shadow-md active:translate-y-1 active:border-b-2 transition-all">
           <span className="flex items-center gap-1 sm:gap-2 text-slate-800"><RotateCw size={24} strokeWidth={3} /> 閉める</span>
         </HoldButton>
-        <HoldButton onAction={() => handleHoldAction(2)} className="flex-1 py-3 sm:py-4 bg-slate-100 hover:bg-slate-200 border-b-[4px] sm:border-b-[6px] border-slate-400 rounded-xl sm:rounded-2xl font-black text-sm sm:text-xl flex flex-col items-center shadow-md active:translate-y-1 active:border-b-2 transition-all">
+        <HoldButton 
+            onAction={() => handleHoldAction(2)} 
+            onActionStart={() => { isInteracting.current = true; }} 
+            onActionEnd={() => { isInteracting.current = false; valueRef.current = value; }}
+            className="flex-1 py-3 sm:py-4 bg-slate-100 hover:bg-slate-200 border-b-[4px] sm:border-b-[6px] border-slate-400 rounded-xl sm:rounded-2xl font-black text-sm sm:text-xl flex flex-col items-center shadow-md active:translate-y-1 active:border-b-2 transition-all">
           <span className="flex items-center gap-1 sm:gap-2 text-slate-800"><RotateCcw size={24} strokeWidth={3} /> 開く</span>
         </HoldButton>
       </div>
@@ -248,8 +274,8 @@ const DragDial = ({ label, value, visualValue, onChange, icon, colorTheme, disab
 const ERROR_INFO = {
   gasLeak: { title: "ガス漏れ・充満", icon: "💨", color: "text-emerald-400", bg: "bg-emerald-950", border: "border-emerald-600", explanation: "生ガスが室内に充満しました。わずかな火花で部屋全体を巻き込む大爆発を引き起こします。" },
   explosion: { title: "異常燃焼・爆発", icon: "💥", color: "text-red-500", bg: "bg-red-950", border: "border-red-600", explanation: "空気を混ぜてしまったり、ガスが溜まった状態で火を近づけたため急激な燃焼（爆発）が起きました。" },
-  backfire: { title: "逆火（バックファイア）", icon: "🔥", color: "text-orange-500", bg: "bg-orange-950", border: "border-orange-600", explanation: "空気が開いたままガスを減らしたため、炎が筒の内部に吸い込まれて燃える『逆火』が起きました。必ず空気を0にして炎を赤くしてから消火してください。" },
-  fire: { title: "引火・火災", icon: "🧯", color: "text-rose-500", bg: "bg-rose-950", border: "border-rose-600", explanation: "火のついたマッチを持ったまま危険な操作をしました。衣服への引火の危険があります。マッチは点火後、空気ねじを触る前に確実に捨ててください。" },
+  backfire: { title: "逆火（バックファイア）", icon: "🔥", color: "text-orange-500", bg: "bg-orange-950", border: "border-orange-600", explanation: "空気が開いたままガスを減らしたため、炎が筒の内部に吸い込まれて燃える『逆火』が起きました。ホースが溶け大事故に繋がります。必ず空気を0にして炎を赤くしてから消火してください。" },
+  fire: { title: "引火・火災", icon: "🧯", color: "text-rose-500", bg: "bg-rose-950", border: "border-rose-600", explanation: "火のついたマッチを持ったままねじを操作しようとしたり、水のない所に捨てたため引火しました。マッチは点火後、すぐに燃えかす入れに捨ててください。" },
   procedure: { title: "重大な手順違反", icon: "⚠️", color: "text-yellow-400", bg: "bg-yellow-950", border: "border-yellow-600", explanation: "理科室の安全基準を著しく逸脱する危険な操作です。正しい手順をもう一度確認してください。" }
 };
 
@@ -259,7 +285,7 @@ const TitleScreen = ({ onStart, onTutorial }) => (
     <div className="bg-slate-800 p-8 sm:p-12 rounded-3xl shadow-2xl max-w-2xl w-full text-center border-t-[12px] border-orange-500 relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><FlameIcon size={150} /></div>
       <h1 className="text-4xl sm:text-6xl font-black mb-2 text-orange-400 tracking-tight leading-tight drop-shadow-lg">ガスバーナー<br />操作免許センター</h1>
-      <p className="text-xl font-bold text-orange-200 mb-6 bg-orange-900/50 inline-block px-4 py-1 rounded-full border border-orange-500/50">Ver Inclusive Edition</p>
+      <p className="text-xl font-bold text-orange-200 mb-6 bg-orange-900/50 inline-block px-4 py-1 rounded-full border border-orange-500/50">Ver 26.8 (Ultimate Edition)</p>
       <div className="bg-slate-700/60 p-6 rounded-2xl mb-8 text-left border-l-[8px] border-blue-400 shadow-inner">
         <p className="text-base sm:text-lg text-slate-200 leading-relaxed font-medium">
           実際の実験手順通りに操作しないと<strong className="text-red-400 bg-red-950 px-2 py-0.5 rounded mx-1 whitespace-nowrap shadow-sm border border-red-800">一発免停</strong>となります。
@@ -324,7 +350,8 @@ const GameOverScreen = ({ reason, errorType, onRetry }) => {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"><div className="w-[800px] h-[800px] bg-red-600 rounded-full blur-[100px] animate-ping opacity-50"></div></div>
       )}
       {errorType === 'backfire' && (<div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-orange-600 to-transparent opacity-60 animate-pulse pointer-events-none"></div>)}
-      {errorType === 'fire' && (<div className="absolute inset-0 flex items-end justify-center pointer-events-none opacity-40"><div className="w-full h-1/2 bg-rose-600 blur-[80px] animate-flicker"></div></div>)}
+      
+      {errorType === 'fire' && (<div className="absolute inset-0 flex items-end justify-center pointer-events-none opacity-40"><div className="w-full h-1/2 bg-rose-600 blur-[80px]"></div></div>)}
 
       <div className={`p-6 sm:p-10 rounded-3xl border-8 ${info.border} shadow-[0_0_100px_rgba(0,0,0,0.6)] max-w-3xl w-full relative z-10 bg-slate-900/90 backdrop-blur-md`}>
         <div className="text-5xl sm:text-8xl mb-4 sm:mb-6 animate-shake drop-shadow-lg">{info.icon}</div>
@@ -397,7 +424,7 @@ const App = () => {
   const [stuckState, setStuckState] = useState({ gas: 'none', air: 'none' });
   const [stuckMistakes, setStuckMistakes] = useState(0);
 
-  // --- 完璧な炎の判定 ---
+  // ★ 炎の判定を人間工学的に調整 (比率 0.85 ~ 1.15)
   const isFlamePerfect = !hasMatchInHand && isBurnerLit && taskPhase === 'adjust_air' && gasLevel >= 30 && (airLevel / (gasLevel || 1) >= 0.85) && (airLevel / (gasLevel || 1) <= 1.15);
 
   const isZoomMode = isBurnerLit && !hasMatchInHand && !taskPhase.startsWith('extinguish_cock') && !taskPhase.startsWith('extinguish_main') && !taskPhase.startsWith('cleanup') && !taskPhase.startsWith('emergency');
@@ -474,7 +501,6 @@ const App = () => {
     if (selectedTool === 'hand') {
         const nextMistakes = stuckMistakes + 1;
         setStuckMistakes(nextMistakes);
-        // 【緩和】3回失敗で免停に変更
         if (nextMistakes >= 3) {
             triggerGameOver("【器具破損】固いねじを素手で力任せに回し続けたため、ねじ山が潰れてバーナーが壊れてしまいました！適切な道具を使いましょう。", "procedure");
         } else {
@@ -634,6 +660,7 @@ const App = () => {
           return triggerGameOver("【火災の危険】火のついたマッチを持ったままガスねじを閉めようとしました！衣服に引火する危険があります。まずはマッチを捨ててください！", "fire");
       }
 
+      // 修正: 消火フェーズやガスを0にする時のみバックファイアを厳格判定（微調整での理不尽死を防ぐ）
       if (airLevel > 0 && isBurnerLit) {
           if (newVal === 0 || taskPhase.startsWith('extinguish')) {
               return triggerGameOver("【逆火の危険】空気調節ねじが開いたままガスを絞ろうとしました！炎が内部に入り込み大変危険です！必ず先に空気を0にして炎を赤くしてください。", "backfire");
@@ -695,6 +722,7 @@ const App = () => {
   }, [gasLevel, taskPhase]);
 
 
+  // ★ 0.5秒で即座に安定フェーズに移行
   useEffect(() => {
     let timer;
     if (isFlamePerfect && gameState === 'playing') {
@@ -706,7 +734,7 @@ const App = () => {
           setTaskPhase('burning');
           setMessage('【着火完了】素晴らしい！青い炎が安定しました。実験が終わったら「消火手順へ進む」を押してください。');
         }
-      }, 3000);
+      }, 500); 
     }
     return () => clearTimeout(timer);
   }, [isFlamePerfect, gameMode, scenario, gameState]);
@@ -752,14 +780,14 @@ const App = () => {
     const ratio = gasLevel > 0 ? airLevel / gasLevel : 0;
     
     let outerColor = "rgba(255, 120, 0, 0.9)"; let innerColor = "rgba(255, 220, 100, 0.9)";
-    let flameWidth = 26; let animationClass = "animate-flicker";
+    let flameWidth = 26; 
     
     if (gasLevel >= 30 && ratio >= 0.85 && ratio <= 1.15) {
       outerColor = "rgba(100, 150, 255, 0.8)"; innerColor = "rgba(180, 240, 255, 0.95)";
-      flameWidth = 20; animationClass = "";
-    } else if (ratio > 1.2) {
+      flameWidth = 20; 
+    } else if (ratio > 1.15) {
       outerColor = "rgba(50, 50, 255, 0.6)"; innerColor = "rgba(150, 150, 255, 0.8)";
-      flameWidth = 16; animationClass = "animate-shake"; 
+      flameWidth = 16; 
     } else if (ratio > 0.3 && ratio < 0.85) {
       outerColor = "rgba(200, 80, 255, 0.8)"; innerColor = "rgba(150, 200, 255, 0.9)"; flameWidth = 24;
     }
@@ -780,9 +808,6 @@ const App = () => {
           <pattern id="knurl" patternUnits="userSpaceOnUse" width="10" height="30">
             <line x1="0" y1="0" x2="0" y2="30" stroke="#000" strokeWidth="3" opacity="0.4"/>
           </pattern>
-          <filter id="blur-md" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" /></filter>
-          <filter id="blur-sm" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2" /></filter>
-          <filter id="hoseShadow"><feDropShadow dx="2" dy="4" stdDeviation="3" floodOpacity="0.5"/></filter>
         </defs>
 
         {!isHoseConnected && (
@@ -808,7 +833,7 @@ const App = () => {
         
         {isHoseConnected && (
           <g>
-            <path d="M 210 455 Q 260 455, 280 650" fill="none" stroke="url(#hoseGrad)" strokeWidth="20" strokeLinecap="round" filter="url(#hoseShadow)"/>
+            <path d="M 210 455 Q 260 455, 280 650" fill="none" stroke="url(#hoseGrad)" strokeWidth="20" strokeLinecap="round" />
             <path d="M 210 455 Q 260 455, 280 650" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.3" transform="translate(0, -7)"/>
             <g transform="translate(202, 447) rotate(-15)">
               <rect x="0" y="0" width="10" height="22" rx="2" fill="#94a3b8" />
@@ -818,7 +843,7 @@ const App = () => {
           </g>
         )}
 
-        <g transform={`translate(0, ${gasY})`} className="transition-transform duration-75">
+        <g transform={`translate(0, ${gasY})`}>
           <rect x="142" y="380" width="16" height="60" fill="#d97706" stroke="#78350f" strokeWidth="1" />
           <g transform="translate(115, 410)">
             <rect x="0" y="0" width="70" height="30" rx="4" fill="#ef4444" stroke="#0f172a" strokeWidth="3"/>
@@ -826,15 +851,14 @@ const App = () => {
           </g>
         </g>
 
-        <g transform={`translate(0, ${totalY})`} className="transition-transform duration-75">
+        <g transform={`translate(0, ${totalY})`}>
           <ellipse cx="150" cy="150" rx="15" ry="5" fill="#cbd5e1" stroke="#1e293b" strokeWidth="3"/>
           
           {isBurnerLit && hFlame > 0 && (
-            <g transform="translate(150, 150)" style={{ mixBlendMode: 'screen' }}>
-              <g className={animationClass} style={{ transformOrigin: '0 0' }}>
-                <path d={`M -${flameWidth} 0 C -${flameWidth} -${hFlame*0.5}, 0 -${hFlame*0.8}, 0 -${hFlame} C 0 -${hFlame*0.8}, ${flameWidth} -${hFlame*0.5}, ${flameWidth} 0 Z`} fill={outerColor} filter="url(#blur-md)" className="transition-all duration-200"/>
-                {isPerfect ? <path d={`M -6 0 L 0 -${hFlame*0.4} L 6 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/> : <path d={`M -${flameWidth*0.7} 0 Q 0 -${hFlame*0.6}, ${flameWidth*0.7} 0 Z`} fill={innerColor} filter="url(#blur-sm)" className="transition-all duration-200"/>}
-              </g>
+            <g transform="translate(150, 150)">
+                {/* opacity描画でGPU負荷を徹底排除 */}
+                <path d={`M -${flameWidth} 0 C -${flameWidth} -${hFlame*0.5}, 0 -${hFlame*0.8}, 0 -${hFlame} C 0 -${hFlame*0.8}, ${flameWidth} -${hFlame*0.5}, ${flameWidth} 0 Z`} fill={outerColor} opacity="0.8" className={ratio > 1.15 ? "animate-shake" : "animate-flicker"} />
+                {isFlamePerfect ? <path d={`M -6 0 L 0 -${hFlame*0.4} L 6 0 Z`} fill={innerColor} opacity="0.9" /> : <path d={`M -${flameWidth*0.7} 0 Q 0 -${hFlame*0.6}, ${flameWidth*0.7} 0 Z`} fill={innerColor} opacity="0.8" className={ratio > 1.15 ? "animate-shake" : "animate-flicker"} />}
             </g>
           )}
 
@@ -848,9 +872,10 @@ const App = () => {
         </g>
 
         {hasMatchInHand && (
-          <g transform={isBurnerLit ? "translate(240, 300) rotate(30)" : "translate(180, 140) rotate(-15)"} className="transition-all duration-700 ease-in-out">
+          <g transform={isBurnerLit ? "translate(190, 150) rotate(-5)" : "translate(180, 140) rotate(-15)"}>
             <rect x="0" y="0" width="70" height="6" fill="#78350f" rx="3" />
-            <circle cx="5" cy="3" r="16" fill="#f97316" filter="url(#blur-md)" className="animate-opacity-flicker" style={{ mixBlendMode: 'screen' }}/>
+            <circle cx="5" cy="3" r="16" fill="#f97316" opacity="0.4" className="animate-opacity-flicker" />
+            <circle cx="5" cy="3" r="10" fill="#f97316" opacity="0.7" className="animate-opacity-flicker" />
             <circle cx="5" cy="3" r="6" fill="#fef08a" />
           </g>
         )}
@@ -881,7 +906,12 @@ const App = () => {
             </div>
           )}
 
-          <div className={`relative w-full max-w-[400px] h-full flex-shrink-0 flex items-end justify-center pb-2 sm:pb-8 transition-transform duration-1000 ease-[cubic-bezier(0.34,1.56,0.64,1)] origin-bottom ${isZoomMode ? 'scale-[1.4] sm:scale-[1.5] translate-y-2 sm:translate-y-4' : 'scale-90 sm:scale-100'}`}>
+          {/* ★修正: 見切れない安全な起点(50% 70%)と倍率(1.15)によるズーム */}
+          <div className="relative w-full max-w-[400px] h-full flex-shrink-0 flex items-end justify-center pb-2 sm:pb-8 transition-transform duration-1000 ease-out" 
+               style={{ 
+                   transformOrigin: '50% 70%', 
+                   transform: isZoomMode ? 'scale(1.15) translateY(5%)' : 'scale(1) translateY(0)' 
+               }}>
              {renderSvgSimulator()}
           </div>
 
@@ -889,7 +919,7 @@ const App = () => {
             onClick={hasMatchInHand ? handleWaterOrDisposeMatch : undefined}
             className={`absolute bottom-2 sm:bottom-6 left-2 sm:left-6 z-10 flex flex-col items-center transition-all duration-700 ${hasMatchInHand ? 'cursor-pointer hover:scale-110 animate-pulse' : ''} ${isZoomMode ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}
           >
-            <div className={`w-16 h-12 sm:w-28 sm:h-20 bg-slate-300 rounded-b-xl sm:rounded-b-2xl border-4 relative overflow-hidden shadow-2xl ${hasMatchInHand && isBurnerLit ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)]' : 'border-slate-500'} ${taskPhase === 'prepare_water' || taskPhase === 'adjust_match' ? 'highlight-target' : ''}`}>
+            <div className={`w-16 h-12 sm:w-28 sm:h-20 bg-slate-300 rounded-b-xl sm:rounded-b-2xl border-4 relative overflow-hidden shadow-2xl ${hasMatchInHand && isBurnerLit ? 'border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)]' : 'border-slate-500'} ${['prepare_water', 'adjust_match'].includes(taskPhase) ? 'highlight-target' : ''}`}>
               <div className="w-full h-2 sm:h-3 bg-slate-600 absolute top-0 z-20"></div>
               
               {hasDroppedMatch && (
@@ -963,12 +993,12 @@ const App = () => {
                 <DragDial 
                     label="空気調節ねじ(上)" value={airLevel} visualValue={airLevel + gasLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" 
                     disabled={taskPhase === 'burning'} stuckLevel={stuckState.air} onTryStuck={() => handleTryStuck('air')} 
-                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw' || taskPhase === 'adjust_air' || taskPhase === 'extinguish_air'} 
+                    highlight={['inspect', 'adjust_air', 'extinguish_air', 'cleanup_screw'].includes(taskPhase)} 
                 />
                 <DragDial 
                     label="ガス調節ねじ(下)" value={gasLevel} visualValue={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" 
                     disabled={taskPhase === 'burning'} stuckLevel={stuckState.gas} onTryStuck={() => handleTryStuck('gas')} 
-                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw' || taskPhase === 'ignite_gas' || taskPhase === 'adjust_gas' || taskPhase === 'extinguish_gas'} 
+                    highlight={['inspect', 'ignite_gas', 'adjust_gas', 'adjust_match', 'extinguish_gas', 'cleanup_screw'].includes(taskPhase)} 
                 />
                 
                 {taskPhase === 'burning' && (
@@ -981,7 +1011,7 @@ const App = () => {
                 )}
               </div>
             ) : (
-              <div className="space-y-4 sm:space-y-8 animate-in fade-in duration-500">
+              <div className="space-y-4 sm:space-y-8 animate-in fade-in duration-500 mx-2 sm:mx-4">
                 <div className="grid grid-cols-2 gap-3 sm:gap-5">
                     <div className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center justify-center gap-1 sm:gap-3 border-4 transition-all shadow-sm ${isCheckedScrew || taskPhase.startsWith('emergency') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-yellow-50 border-yellow-400 text-yellow-800'}`}>
                         <Wrench className="w-6 h-6 sm:w-8 sm:h-8" /> {isCheckedScrew ? 'ねじ点検済' : 'ドラムを回して0%に'}
@@ -990,7 +1020,7 @@ const App = () => {
                         {hasMatchInHand && isBurnerLit ? <FlameIcon className="w-6 h-6 sm:w-8 sm:h-8 text-rose-600"/> : <Droplets className="w-6 h-6 sm:w-8 sm:h-8" />} 
                         {hasMatchInHand && isBurnerLit ? 'マッチを水に捨てる' : waterInAshtray ? '水 準備完了' : '燃えかす入れに水'}
                     </button>
-                    <button onClick={handleHose} disabled={taskPhase.startsWith('emergency') || taskPhase === 'inspect'} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${isHoseConnected || taskPhase.startsWith('emergency') || taskPhase === 'inspect' ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'} ${taskPhase === 'prepare_hose' || taskPhase === 'cleanup_hose' ? 'highlight-target' : ''}`}>
+                    <button onClick={handleHose} disabled={taskPhase.startsWith('emergency') || taskPhase === 'inspect'} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${isHoseConnected || taskPhase.startsWith('emergency') || taskPhase === 'inspect' ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-white border-slate-400 text-slate-800 hover:bg-slate-50 active:translate-y-1 active:border-b-[2px]'} ${['prepare_hose', 'cleanup_hose'].includes(taskPhase) ? 'highlight-target' : ''}`}>
                         <PlugZap className="w-6 h-6 sm:w-8 sm:h-8" /> {isHoseConnected ? 'ゴム管接続済' : 'ゴム管を繋ぐ'}
                     </button>
                     <button onClick={handleMatch} disabled={hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect')} className={`p-3 sm:p-6 rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-xl flex flex-col items-center gap-1 sm:gap-3 border-b-4 sm:border-b-[6px] transition-all shadow-sm ${hasMatchInHand || taskPhase.startsWith('emergency') || taskPhase.startsWith('inspect') ? 'bg-slate-200 text-slate-500 border-slate-300' : 'bg-orange-100 border-orange-500 text-orange-900 hover:bg-orange-200 active:translate-y-1 active:border-b-[2px]'} ${taskPhase === 'ignite_match' ? 'highlight-target' : ''}`}>
@@ -999,20 +1029,20 @@ const App = () => {
                 </div>
 
                 <div className={`flex justify-evenly gap-3 sm:gap-6 bg-slate-100 p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] border-4 shadow-sm ${taskPhase.startsWith('emergency') ? 'border-red-400' : 'border-slate-300'}`}>
-                  <RealValve isOpen={mainValve} onClick={handleMainValve} label="元栓" disabled={!isHoseConnected} isCock={false} highlight={taskPhase === 'ignite_main' || taskPhase === 'extinguish_main'} />
-                  <RealValve isOpen={cock} onClick={handleCock} label="コック" disabled={!isHoseConnected} isCock={true} highlight={taskPhase === 'ignite_cock' || taskPhase === 'extinguish_cock'} />
+                  <RealValve isOpen={mainValve} onClick={handleMainValve} label="元栓" disabled={!isHoseConnected} isCock={false} highlight={['ignite_main', 'extinguish_main'].includes(taskPhase)} />
+                  <RealValve isOpen={cock} onClick={handleCock} label="コック" disabled={!isHoseConnected} isCock={true} highlight={['ignite_cock', 'extinguish_cock'].includes(taskPhase)} />
                 </div>
 
                 <div className="space-y-4 sm:space-y-8">
                   <DragDial 
                     label="空気調節ねじ(上)" value={airLevel} visualValue={airLevel + gasLevel} onChange={updateAir} icon={<Wind className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="blue" 
                     disabled={taskPhase === 'emergency' && airLevel === 0} stuckLevel={stuckState.air} onTryStuck={() => handleTryStuck('air')} 
-                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw'} 
+                    highlight={['inspect', 'cleanup_screw'].includes(taskPhase)} 
                   />
                   <DragDial 
                     label="ガス調節ねじ(下)" value={gasLevel} visualValue={gasLevel} onChange={updateGas} icon={<FlameIcon className="w-6 h-6 sm:w-8 sm:h-8" />} colorTheme="red" 
                     disabled={false} stuckLevel={stuckState.gas} onTryStuck={() => handleTryStuck('gas')} 
-                    highlight={taskPhase === 'inspect' || taskPhase === 'cleanup_screw'} 
+                    highlight={['inspect', 'cleanup_screw'].includes(taskPhase)} 
                   />
                 </div>
 
